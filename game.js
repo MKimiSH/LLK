@@ -4,19 +4,20 @@
 
 var difficulty = 0; // 暂时只有0
 var board = new Array();
-var numImages = 3; // 1~numImages in board -> images
-var bStatus = {H:2, W:5, imw:40, imh:40, osX:10, osY:10};
+var numImages = 5; // 1~numImages in board -> images
+var bStatus = {H:6, W:4, imw:40, imh:40, osX:10, osY:10};
 var numTilesLeft = 0; //必为偶数
 var numTilesStart = 0;
 var playerScore = 0;
 var hintsLeft = 0;
 var shuffleLeft = 0;
 var EMPTY = 0;
-var timeLeft = 120; //剩余秒数
+var timeLeft = 30; //剩余秒数
 
 var cTile = {i:0, j:0};
 var isWin = false;
 var startTime;
+var inGame = false;
 
 var boardCanvas = document.createElement("canvas");
 boardCanvas.width = 500;
@@ -45,34 +46,55 @@ canvas.onclick = function(e){
 function runGame(){
   // imgs = getImgs(imgs, imgids);
   isWin = false;
+  inGame = true;
   startTime = new Date();
   canvas.style.display = "";
+  printWall.style.display = 'none';
   buildBoard();
-  displayBoard(context, board, 6, 10);
+  startBleed(context);
+  displayBoard(context, board, bStatus.H, bStatus.W);
 }
-        
+function endGame(){
+  canvas.style.display = "none";
+  printWall.style.display = '';
+  if(isWin){
+    showLog("won last game!");
+  }
+  else showLog("lost last game!");
+  board = new Array();
+  cTile = {i:0, j:0};
+  startTime = null;
+  inGame = false;
+}
 // 画图的函数
 function displayBoard(cxt, board, H, W, clickedTile){
-  cxt.clearRect(0,0,canvas.width, canvas.height);
   var imh = bStatus.imh;
   var imw = bStatus.imw;
   var offsetY = bStatus.osY;
   var offsetX = bStatus.osX;
+  cxt.clearRect(0,0, offsetX+imw*(W+2), offsetY+imh*(H+2));
   for(var i=1; i<=H; ++i){
     for(var j=1; j<=W; ++j){
       if(board[i][j]>0){
-        cxt.drawImage(imgs[board[i][j]], offsetX+imw*(j-1), offsetY+imh*(i-1), imw, imh);
+        cxt.drawImage(imgs[board[i][j]], offsetX+imw*(j), offsetY+imh*(i), imw, imh);
       }
     }
   }
+  var tw = imw*W*0.3, th = 18;
+  var tosy = offsetY + imh*(H+2.5) + th;
+  var tosx = offsetX + imw + imw*W-tw;
+  cxt.clearRect(tosx, tosy-th-2, tw*1.5, th+5);
+  cxt.font = "14px SimSun";
+  cxt.fillText("剩余块数：" + numTilesLeft, tosx, tosy);
+  
   if(clickedTile){
-    var dx = offsetX+imw*(clickedTile.j-1);
-    var dy = offsetY+imh*(clickedTile.i-1);
+    var dx = offsetX+imw*(clickedTile.j);
+    var dy = offsetY+imh*(clickedTile.i);
     
     cxt.beginPath();
     cxt.rect(dx, dy, imw, imh);
     cxt.strokeStyle = "red";
-    cxt.lineWidth = 5;
+    cxt.lineWidth = 3;
     cxt.stroke();
   }
 }
@@ -86,8 +108,61 @@ function tilesDisappear(){
   
 }
 
-function connectTile(){
+function startBleed(cxt){
+  var imh = bStatus.imh;
+  var imw = bStatus.imw;
+  var offsetY = bStatus.osY;
+  var offsetX = bStatus.osX;
+  var H = bStatus.H;
+  var W = bStatus.W;
   
+  var rw = imw*W*0.6, rh = 18;
+  var rosy = offsetY + imh*(H+2.5);
+  var rosx = offsetX + imw;
+  
+  var pctLeft = 100;
+  var pctStep = 0.5/timeLeft*100;
+  setTimeout(function(){
+    cxt.clearRect(rosx-3, rosy-3, rw+6, rh+6);
+    cxt.beginPath();
+    pctLeft -= pctStep;
+    cxt.rect(rosx, rosy, rw*pctLeft/100, rh);
+    cxt.fillStyle = "red";
+    cxt.fill();
+    
+    cxt.beginPath();
+    cxt.rect(rosx, rosy, rw, rh);
+    cxt.strokeStyle = "#000";
+    cxt.strokeWidth = 2;
+    cxt.stroke();
+    if(!inGame) return;
+    if(pctLeft <= 0 && inGame){
+      onLose();
+    }
+    else {
+      setTimeout(arguments.callee, 500);
+    }
+  }, 500);
+}
+
+function connectTile(ctx, tile1, tile2){
+  var imh = bStatus.imh;
+  var imw = bStatus.imw;
+  var offsetY = bStatus.osY;
+  var offsetX = bStatus.osX;
+  var i1 = tile1.i, j1 = tile1.j, i2 = tile2.i, j2 = tile2.j;
+  var pts = getConnPoints(i1, j1, i2, j2);
+  for(var i=0; i<pts.length; i++){
+    pts[i] = board2Canvas(pts[i]);
+  }
+  
+  ctx.beginPath();
+  for(var i=0; i<pts.length; i++){
+    ctx.lineTo(pts[i].x, pts[i].y);
+  }
+  ctx.strokeStyle = "#069";
+  ctx.strokeWidth = 2;
+  ctx.stroke();
 }
 
 //控制函数
@@ -115,12 +190,16 @@ function updateBoard(point){
       if(isCon){
         board[i1][j1] = 0;
         board[i2][j2] = 0;
+        numTilesLeft -= 2;
+        connectTile(context, tileClicked, cTile);
         cTile = {i:0, j:0};
-        displayBoard(context, board, bStatus.H, bStatus.W);
-        if(checkWin()){
-          isWin = true;
-          onWin();
-        }
+        setTimeout(function(){
+          displayBoard(context, board, bStatus.H, bStatus.W);
+          if(checkWin()){
+            isWin = true;
+            onWin();
+          }
+        }, 100);
       }
       else{
         displayBoard(context, board, bStatus.H, bStatus.W, tileClicked);
@@ -133,14 +212,22 @@ function updateBoard(point){
 function pointInBoard(point){
   var bdH = bStatus.H * bStatus.imh;
   var bdW = bStatus.W * bStatus.imw;
-  var osx = bStatus.osX;
-  var osy = bStatus.osY;
+  var osx = bStatus.osX + bStatus.imw;
+  var osy = bStatus.osY + bStatus.imh;
   return point.x<=bdW+osx && point.x>osx && point.y<=bdH+osy && point.y>osy;
 }
 
 function window2Canvas(x,y){
   var bbox = canvas.getBoundingClientRect();
   return {x: x-bbox.left, y: y-bbox.top};
+}
+
+function board2Canvas(tile){
+  var imh = bStatus.imh;
+  var imw = bStatus.imw;
+  var offsetY = bStatus.osY;
+  var offsetX = bStatus.osX;
+  return {x: offsetX + tile.j*imw + imw/2, y: offsetY + tile.i*imh + imh/2};
 }
 
 function point2Tile(x, y){
@@ -152,8 +239,9 @@ function point2Tile(x, y){
   y -= offsetY;
   x /= imw;
   y /= imh;
+  // console.log([parseInt(y), parseInt(x)]);
   // return {x:parseInt(x)+1, y:parseInt(y)+1};
-  return {i:parseInt(y)+1, j:parseInt(x)+1};
+  return {i:parseInt(y), j:parseInt(x)};
 }
 
 // 游戏函数
@@ -283,22 +371,24 @@ function check1line(i,j , k,l){
 function check2line(i,j , k,l){
   var r1 = board[i][l]===0 && check1line(i,j,i,l) && check1line(k,l,i,l);
   var r2 = board[k][j]===0 && check1line(i,j,k,j) && check1line(k,l,k,j);
-  return r1||r2;
+  if(r1) return {i:i, j:l};
+  if(r2) return {i:k, j:j};
+  return false;
 }
 // check3line = 构造两个cbd, 分别给出两个点能够一次连接到达的地方，然后对应查看有无1连接的存在
 // 当然可以不用board，一维数组足矣。。
 function check3line(i,j , k,l){
   var cbd1 = buildConnBoard(i,j); //connect board
   var cbd2 = buildConnBoard(k,l);
-  console.log(cbd1);
-  console.log(cbd2);
   var ccol1 = cbd1[0], crow1 = cbd1[1];
   var ccol2 = cbd2[0], crow2 = cbd2[1];
   for(var col=0; col<=bStatus.W+1; col++){
-    if(crow1[col]==1 && crow2[col]==1) return true;
+    if(crow1[col]==1 && crow2[col]==1 && check1line(i, col, k, col)) 
+      return [{i:i, j:col}, {i:k, j:col}];
   }
   for(var row=0; row<=bStatus.H+1; row++){
-    if(ccol1[row]==1 && ccol2[row]==1) return true;
+    if(ccol1[row]==1 && ccol2[row]==1 && check1line(row, j, row, l)) 
+      return [{i:row, j:j}, {i:row, j:l}];;
   }
   return false;
 }
@@ -307,19 +397,45 @@ function check3line(i,j , k,l){
 function checkConnect(i1, j1, i2, j2){
   if(i1===i2 || j1===j2){
     if(check1line(i1, j1, i2, j2)){
-      console.log("1");
       return true;
     }
   }
   if(check2line(i1, j1, i2, j2)){
-    console.log("2");
     return true;
   }
   if(check3line(i1, j1, i2, j2)){
-    console.log("3");
     return true;
   }
   return false;
+}
+
+//Already known that they are connected, return turn points for drawing
+function getConnPoints(i1, j1, i2, j2){
+  var ret = new Array();
+  ret[0] = {i:i1, j:j1};
+  if(i1===i2 || j1===j2){
+    var pt1 = check1line(i1, j1, i2, j2);
+    if(pt1){
+      // console.log("1");
+      ret[1] = {i:i2, j:j2};
+      return ret;
+    }
+  }
+  var pt2 = check2line(i1, j1, i2, j2);
+  if(pt2){
+    // console.log("2");
+    ret[1] = pt2;
+    ret[2] = {i:i2, j:j2};
+    return ret;
+  }
+  var pt3 = check3line(i1, j1, i2, j2);
+  if(pt3){
+    ret[1] = pt3[0];
+    ret[2] = pt3[1];
+    ret[3] = {i:i2, j:j2};
+    // console.log("3");
+    return ret;
+  }
 }
 
 // checkStuck = 遍历board，对每一组相同的image，checkConnect，找到就true。
@@ -345,7 +461,8 @@ function onWin(){
   var millisecs = Date.now() - startTime;
   var secs = millisecs/1000;
   alert('finished in ' + secs + 'secs!');
-  sendMsg('opp finished in ' + secs + 'secs!');
+  sendMsg(null, 'OPP: finished in ' + secs + 'secs!');
+  endGame();
 }
 
 function checkWin(){
@@ -357,3 +474,7 @@ function checkWin(){
   return true;
 }
 
+//时间到了，输了！
+function onLose(){
+  alert('Game over!');
+}

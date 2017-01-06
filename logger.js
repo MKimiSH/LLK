@@ -14,13 +14,14 @@ var clientId = 'testLLK';
 var realtime;
 var client;
 var messageIterator;
-var selfReady; // Am I ready?
 
+var selfReady; // Am I ready?
 var opponent; // 对手信息
 var oppReady; // 对手是否准备
 
 // 用来存储创建好的 roomObject
 var room;
+var autoquit = true;
 
 // 监听是否服务器连接成功
 var firstFlag = true;
@@ -34,6 +35,7 @@ var sendBtn = document.getElementById('send-btn');
 var queryRoomBtn = $('#query-rooms')[0];
 var createRoomBtn = $('#create-room')[0];
 var joinRoomBtn = $('#join-room')[0];
+var quitRoomBtn = $('#quit-room')[0];
 var readyBtn = $('#ready-button')[0];
 
 var inputName = document.getElementById('input-name');
@@ -52,6 +54,7 @@ bindEvent(queryRoomBtn, 'click', queryRooms);
 bindEvent(createRoomBtn, 'click', createJoinRoom);
 bindEvent(joinRoomBtn, 'click', joinRoom);
 bindEvent(readyBtn, 'click', sendReady);
+bindEvent(quitRoomBtn, 'click', quitRoom);
 
 
 bindEvent(document.body, 'keydown', function(e) {
@@ -93,15 +96,19 @@ function main(){
   })
   .then(function(){
     showLog('查找已有房间……');
-    queryRooms();
+    rooms = queryRooms(true);
   })
-  
+  .catch(function(err){
+    console.error(err);
+  })
 }
 
-function sendMsg() {
+function sendMsg(e, msg) {
 
   var val = inputSend.value;
-
+  
+  if(msg) val = msg;
+  
   // 不让发送空字符
   if (!String(val).replace(/^\s+/, '').replace(/\s+$/, '')) {
     alert('请输入点文字！');
@@ -140,6 +147,7 @@ function sendMsgAsFile() {
 }
 
 function createJoinRoom(){
+  quitRoom();
   showLog('正在创建房间……');
   var roomName = 'RoomPlay';
   client.createConversation({
@@ -168,6 +176,7 @@ function createJoinRoom(){
         msgTime = message.timestamp;
       }
       checkReady(message);
+      checkOppFinished(message);
       showMsg(message);
     });
   })
@@ -176,9 +185,13 @@ function createJoinRoom(){
   })
 }
 
-function joinRoom(){
-  var rId = inputRoomId.value;
-  showLog('准备加入房间ID：', rId);
+function joinRoom(e, i){
+  quitRoom();
+  var rNum = inputRoomId.value;
+  if(i) rNum = i;
+  // showLog('准备加入房间ID：', rId);
+  showLog('准备加入房间 ', rNum-1);
+  var rId = rooms[rNum-1].id;
   client.getConversation(rId)
   .then(function(conversation){
     if(conversation){
@@ -198,6 +211,7 @@ function joinRoom(){
     getLog(function(){
       printWall.scrollTop = printWall.scrollHeight;
       showLog('已经加入。');
+      showLog('Members are: '+room.members+'.');
     });
     conversation.on('message', function(message) {
       if (!msgTime) {
@@ -237,7 +251,38 @@ function queryRooms(){
     rooms = data;
     showRooms(rooms);
   })
+  .then(function(){
+    // if(!autojoin) return;
+    if(!autoquit) return;
+    var idx;
+    for(var i=0; i<rooms.length; i++){
+      console.log(rooms[i].members);
+      if(rooms[i].members.indexOf(clientId)>=0){
+        rooms[i].quit();
+        idx = i+1;
+        // break;
+      }
+    }
+    autoquit = false;
+    // if(idx){
+      // showLog('找到之前加入的房间，自动加入第一个房间！');
+      // joinRoom(idx);
+    // }
+    // autojoin = false;
+  })
   .catch(console.error.bind(console));
+}
+
+function quitRoom(){
+  if(!room){
+    showLog('并未加入房间，不能退出房间');
+    return;
+  }
+  room.quit()
+  .then(function(){
+    showLog('成功退出房间');
+  }).catch(console.error.bind(console));
+  room = null;
 }
 
 
@@ -261,6 +306,15 @@ function checkReady(m){
     startCountdown(3);
   }
 }
+function checkOppFinished(m){
+  var text = m.text;
+  var from = m.from;
+  if(text.indexOf("OPP: finished")>=0){
+    alert('opp has finished!');
+  }
+  endGame();
+}
+
 function startCountdown(sec){
   showLog("start Countdown!");
   showLog("secs remain: ", sec--);
@@ -273,7 +327,6 @@ function startCountdown(sec){
       showLog("Countdown over!!");
       // printWall.visibility = 'hidden';
       // printWall.style.visibility='hidden';
-      printWall.style.display = 'none';
       runGame();
     }
   }, 1000);
@@ -304,9 +357,9 @@ function showRooms(rooms){
   }
   showLog("共有"+lrooms+"个房间: ");
   for(var i=0; i<lrooms; i++){
-    showLog("Room"+i);
+    showLog("Room "+(i+1));
     showLog("ID: "+ rooms[i].id);
-    showLog("Number of members: "+ rooms[i].members.length);
+    // showLog("Number of members: "+ rooms[i].members.length);
     showLog("members: " + rooms[i].members);
   }
 }
