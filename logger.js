@@ -3,7 +3,7 @@ var appId = 'Ecy4bFJFxCowJKwqNtO1GLsv-gzGzoHsz';
 var appKey = 'JwVKNn8ayp8kU5IwVKc7UjUb';
 
 AV.initialize(appId, appKey);
-
+// 我还得把这些事件处理都换成jQuery框架。。。。日狗？
 // 请换成你自己的一个房间的 conversation id（这是服务器端生成的）
 var roomId = '586cf9f161ff4b006b2eff0a';
 var rooms = [];
@@ -190,7 +190,7 @@ function joinRoom(e, i){
   var rNum = inputRoomId.value;
   if(i) rNum = i;
   // showLog('准备加入房间ID：', rId);
-  showLog('准备加入房间 ', rNum-1);
+  showLog('准备加入房间 ', rNum);
   var rId = rooms[rNum-1].id;
   client.getConversation(rId)
   .then(function(conversation){
@@ -219,6 +219,7 @@ function joinRoom(e, i){
         msgTime = message.timestamp;
       }
       checkReady(message);
+      checkOppFinished(message);
       showMsg(message);
     });
   })
@@ -308,6 +309,7 @@ function checkReady(m){
 }
 function checkOppFinished(m){
   var text = m.text;
+  console.log(text);
   var from = m.from;
   if(text.indexOf("OPP: finished")>=0){
     alert('opp has finished!');

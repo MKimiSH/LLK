@@ -4,15 +4,16 @@
 
 var difficulty = 0; // 暂时只有0
 var board = new Array();
-var numImages = 5; // 1~numImages in board -> images
-var bStatus = {H:6, W:4, imw:40, imh:40, osX:10, osY:10};
+var numImages = 6; // 1~numImages in board -> images
+var bStatus = {H:4, W:4, imw:40, imh:40, osX:10, osY:10, nIm:2};
 var numTilesLeft = 0; //必为偶数
 var numTilesStart = 0;
 var playerScore = 0;
 var hintsLeft = 0;
+var hintTiles;
 var shuffleLeft = 0;
 var EMPTY = 0;
-var timeLeft = 30; //剩余秒数
+var timeLeft = 130; //剩余秒数
 
 var cTile = {i:0, j:0};
 var isWin = false;
@@ -32,9 +33,30 @@ var context = canvas.getContext("2d");
 
 // runGame();
 var showImgBtn = $("#showimage-btn")[0];
+var hintBtn = $("#hint-btn");
+var shuffleBtn = $("#shuffle-btn");
+
 showImgBtn.onclick = function(e){
   runGame();
 }
+
+hintBtn.click(function(){
+  while(1){
+    var h = checkHint();
+    if(h) break;
+    shuffleBoard();
+  }
+  hintTiles = h;
+  displayBoard(context, board, bStatus.H, bStatus.W);
+});
+shuffleBtn.click(function(){
+  shuffleBoard();
+  while(!checkHint()){
+    shuffleBoard();
+  }
+  displayBoard(context, board, bStatus.H, bStatus.W);
+});
+
 
 canvas.onclick = function(e){
   var point = window2Canvas(e.clientX, e.clientY);
@@ -50,13 +72,18 @@ function runGame(){
   startTime = new Date();
   canvas.style.display = "";
   printWall.style.display = 'none';
+  hintBtn.css("display", "");
+  shuffleBtn.css("display", "");
   buildBoard();
   startBleed(context);
   displayBoard(context, board, bStatus.H, bStatus.W);
 }
+
 function endGame(){
   canvas.style.display = "none";
   printWall.style.display = '';
+  hintBtn.css("display", "none");
+  shuffleBtn.css("display", "none");
   if(isWin){
     showLog("won last game!");
   }
@@ -65,8 +92,12 @@ function endGame(){
   cTile = {i:0, j:0};
   startTime = null;
   inGame = false;
+  selfReady = false;
+  oppReady = false;
 }
-// 画图的函数
+
+
+// 画图的函数们
 function displayBoard(cxt, board, H, W, clickedTile){
   var imh = bStatus.imh;
   var imw = bStatus.imw;
@@ -97,12 +128,22 @@ function displayBoard(cxt, board, H, W, clickedTile){
     cxt.lineWidth = 3;
     cxt.stroke();
   }
+  if(hintTiles){
+    for(var idx=0; idx<2; ++idx){
+      var i = hintTiles[idx].i, j = hintTiles[idx].j;
+      var dx = offsetX+imw*(j);
+      var dy = offsetY+imh*(i);
+      
+      cxt.beginPath();
+      cxt.rect(dx, dy, imw, imh);
+      cxt.strokeStyle = "yellow";
+      cxt.lineWidth = 2;
+      cxt.stroke();
+    }
+    hintTiles = null;
+  }
 }
 
-// 这个应该有颜色值，提示、消去和选择不同
-function highlightTile(){
-  
-}
 
 function tilesDisappear(){
   
@@ -440,19 +481,23 @@ function getConnPoints(i1, j1, i2, j2){
 
 // checkStuck = 遍历board，对每一组相同的image，checkConnect，找到就true。
 // 这个找到的应当也可以作为返回值，以便作为hint
-function checkStuck(){
+function checkHint(){
   for(var i=1; i<=bStatus.H; i++){
     for(var j=1; j<=bStatus.W; j++){
       if(board[i][j] === EMPTY) continue;
       for(var k=1; k<=bStatus.H; k++){
         for(var l=1; l<=bStatus.W; l++){
           if(board[k][l] === EMPTY) continue;
-          if(board[i][j] !== board[k][l]) continue;
-          if(checkConnect(i,j,k,l)) return true;
+          if((i==k&&j==l) || board[i][j] !== board[k][l]) continue;
+          if(checkConnect(i,j,k,l)) {
+            // console.log([i,j,k,l]);
+            return [{i:i, j:j}, {i:k, j:l}];
+          }
         }
       }
     }
   }
+  // console.log('nothing found');
   return false;
 }
 
@@ -461,7 +506,9 @@ function onWin(){
   var millisecs = Date.now() - startTime;
   var secs = millisecs/1000;
   alert('finished in ' + secs + 'secs!');
-  sendMsg(null, 'OPP: finished in ' + secs + 'secs!');
+  if(room){
+    sendMsg(null, 'OPP: finished in ' + secs + 'secs!');
+  }
   endGame();
 }
 
@@ -477,4 +524,5 @@ function checkWin(){
 //时间到了，输了！
 function onLose(){
   alert('Game over!');
+  endGame();
 }

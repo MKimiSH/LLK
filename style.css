@@ -35,6 +35,23 @@ a {
 .btn:active {
   opacity: 1;
 }
+.game-btn{
+  height: 22px;
+  line-height: 22px;
+  padding: 1px 10px;
+  background-color: #990;
+  color: #fff;
+  display: inline-block;
+  cursor: pointer;
+  transition: opacity 0.8s;
+}
+.game-btn:hover {
+  opacity: 0.6;
+}
+.game-btn:active {
+  opacity: 1;
+}
+
 .strong {
   color: #f00;
 }
