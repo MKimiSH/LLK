@@ -14,6 +14,7 @@ var clientId = 'ROOMHEAD';
 var readyMsg = 'READYyYyY';
 var startMsg = 'StaRtTtTt';
 var endMsg = 'EndDdDDDd';
+var finishedMsg = 'FinIshEdD';
 
 var realtime;
 var client;
@@ -96,8 +97,7 @@ function ensureConstRooms(N){
   }
   for(i=0; i<N; i++){
     joinOneRoom(i);
-    rooms[i].set('attr', {Num: i});
-    rooms[i].set('attr', {vis:true});
+    rooms[i].set('attr', {Num: i, vis: true, inGame: false});
     players[i] = new Array();
   }
 }
@@ -244,7 +244,47 @@ function dealWithMessage(message, idx){
   }
   if(t == readyMsg){
     players[idx][fidx].isReady = true;
+    checkAllReady(idx);
   }
+  if(t == finishedMsg){
+    endGameRoom(idx, fidx);
+  }
+}
+
+function checkAllReady(idx){
+  var conv = rooms[idx];
+  var pls = players[idx];
+  var isAllReady = true;
+  for (var i=0; i<pls.length; i++){
+    if(!pls[i].isReady){
+      isAllReady = false;
+      break;
+    }
+  }
+  if(isAllReady){
+    startGameRoom(idx);
+  }
+}
+function startGameRoom(idx){
+  var val = startMsg;
+  rooms[idx].send(new AV.TextMessage(val)).then(function(message) {
+    // 发送成功之后的回调
+    inputSend.value = '';
+    showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
+    printWall.scrollTop = printWall.scrollHeight;
+  });
+  rooms[idx].set('attr', {inGame: true});
+}
+function endGameRoom(idx){
+  var val = endMsg;
+  rooms[idx].send(new AV.TextMessage(val)).then(function(message) {
+    // 发送成功之后的回调
+    inputSend.value = '';
+    showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
+    printWall.scrollTop = printWall.scrollHeight;
+  });
+  sendMsg('Winner is ' + players[idx][fidx].id);
+  rooms[idx].set('attr', {inGame: false});
 }
 
 function sendMsg(e, msg) {
