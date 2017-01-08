@@ -1,15 +1,15 @@
-
+// script for ROOMHEAD, which is in charge of creating rooms
+// and checking ready and start and end games.
+// it is supposed to run all-the-time.
 var appId = 'Ecy4bFJFxCowJKwqNtO1GLsv-gzGzoHsz';
 var appKey = 'JwVKNn8ayp8kU5IwVKc7UjUb';
 
 AV.initialize(appId, appKey);
-// 我还得把这些事件处理都换成jQuery框架。。。。日狗？
-// 请换成你自己的一个房间的 conversation id（这是服务器端生成的）
-var roomId = '586cf9f161ff4b006b2eff0a';
-var rooms = [];
+var rooms = []; //在每个房间都存在着的成员
+var players = [];
 
 // 每个客户端自定义的 id
-var clientId = 'testLLK';
+var clientId = 'ROOMHEAD';
 // 一些特定的消息，用于标识开始、结束等控制事件。
 var readyMsg = 'READYyYyY';
 var startMsg = 'StaRtTtTt';
@@ -19,13 +19,9 @@ var realtime;
 var client;
 var messageIterator;
 
-var selfReady; // Am I ready?
-var opponent; // 对手信息
-var oppReady; // 对手是否准备
-
 // 用来存储创建好的 roomObject
 var room;
-var autoquit = true;
+var autoquit = false;
 
 // 监听是否服务器连接成功
 var firstFlag = true;
@@ -33,50 +29,14 @@ var firstFlag = true;
 // 用来标记历史消息获取状态
 var logFlag = false;
 
-var openBtn = document.getElementById('open-btn');
-var sendBtnAsFile = document.getElementById('send-btn-as-file');
-var sendBtn = document.getElementById('send-btn');
-var queryRoomBtn = $('#query-rooms')[0];
-var createRoomBtn = $('#create-room')[0];
-var joinRoomBtn = $('#join-room')[0];
-var quitRoomBtn = $('#quit-room')[0];
-var readyBtn = $('#ready-button')[0];
-
-var inputName = document.getElementById('input-name');
-var inputSend = document.getElementById('input-send');
-var printWall = document.getElementById('print-wall');
-var inputRoomId = $('#input-roomname')[0];
-
 // 拉取历史相关
 // 最早一条消息的时间戳
 var msgTime;
 
-bindEvent(openBtn, 'click', main);
-bindEvent(sendBtn, 'click', sendMsg);
-bindEvent(sendBtnAsFile, 'click', sendMsgAsFile);
-bindEvent(queryRoomBtn, 'click', queryRooms);
-bindEvent(createRoomBtn, 'click', createJoinRoom);
-bindEvent(joinRoomBtn, 'click', joinRoom);
-bindEvent(readyBtn, 'click', sendReady);
-bindEvent(quitRoomBtn, 'click', quitRoom);
-
-
-bindEvent(document.body, 'keydown', function(e) {
-  if (e.keyCode === 13) {
-    if (firstFlag) {
-      main();
-    } else {
-      sendMsg();
-    }
-  }
-});
+main();
 
 function main(){
   showLog('正在连接服务器。。。');
-  var val = inputName.value;
-  if (val) {
-    clientId = val;
-  }
   if (!firstFlag) {
     client.close();
   }
@@ -102,9 +62,189 @@ function main(){
     showLog('查找已有房间……');
     rooms = queryRooms(true);
   })
+  .then(function(){
+    ensureConstRooms(10);
+    initPlayers();
+  })
+  .then(function(){
+    client.on('membersjoined', function membersjoinedEventHandler(payload, conversation) {
+      addPlayers(conversation, payload);
+    });
+    client.on('membersleft', function membersleftEventHandler(payload, conversation) {
+      deletePlayers(conversation, payload);
+    });
+  })
   .catch(function(err){
     console.error(err);
   })
+}
+
+function ensureConstRooms(N){
+  var nrooms = rooms.length;
+  var i;
+  if(nrooms>=N){
+    showLog('Set '+(nrooms-N)+' rooms invisible!');
+    for(i=N; i<nrooms; i++){
+      rooms[i].set('attr', {vis:false});
+    }
+  }
+  else {
+    showLog('Add '+(N-nrooms)+' rooms!');
+    for(i=nrooms; i<N; i++){
+      rooms[i] = createOneRoom();
+    }
+  }
+  for(i=0; i<N; i++){
+    joinOneRoom(i);
+    rooms[i].set('attr', {Num: i});
+    rooms[i].set('attr', {vis:true});
+    players[i] = new Array();
+  }
+}
+
+function createOneRoom(){
+  showLog('Create one room!');
+  var curRoom;
+  var currId;
+  var roomName = 'RoomPlay';
+  client.createConversation({
+    name: roomName,
+    members: [],
+    attributes: {gameName:'LLK', maxPlayers: 6};
+  })
+  .then(function(conv){
+    currId = conv.id;
+    showLog('Created room: ', currId);
+    return conv;
+  })
+  // .then(function(conv){
+    // return conv.join();
+  // }) // 在joinOneRoom中加入
+  .then(function(conv){
+    curRoom = conv;
+    // ROOMHEAD 不关心过去的聊天记录
+    // 不用messageIterator
+    showLog('Joined room.');
+    conv.on('message', function(message){
+      if(!msgTime){
+        msgTime = message.timestamp;
+      }
+      dealWithMessage(message, conv.get('attr').Num);
+    });
+  })
+  .catch(function(err){
+    console.error(err);
+  });
+  return curRoom;
+}
+
+function joinOneRoom(i){
+  var rid = rooms[i].id;
+  client.getConversation(rid)
+  .then(function(conv){
+    if(conv){
+      return conv;
+    }
+    else {
+      showLog('Room not exist!');
+      return;
+    }
+  })
+  .then(function(conv)){
+    return conv.join();
+  })
+  .then(function(conv){
+    showLog('Joined room '+i);
+    rooms[i] = conv;
+    conv.on('message', function(message){
+      if(!msgTime){
+        msgTime = message.timestamp;
+      }
+      dealWithMessage(message);
+    });
+  })
+  .catch(function(err){
+    console.error(err);
+  });
+}
+
+function initPlayers(){
+  showLog('init players!');
+  var r;
+  var i;
+  for(r=0; r<rooms.length; r++){
+    ms = rooms[r].members;
+    for(i=0; i<ms.length; i++){
+      if(ms[i]==clientId){
+        continue;
+      }
+      else{
+        members[idx].push({id: ms[i], isReady: false})
+      }
+    }
+  }
+}
+
+function addPlayers(conv, pl){
+  var idx = searchRoomsforRoom(conv);
+  if(idx<0) {
+    showLog('Room not found in _rooms_, please check!');
+    return;
+  }
+  var newmembers = pl.members;
+  var l = players[idx].length;
+  for(var i=0; i<newmembers.length; i++){
+    for(var j=0; j<l; j++){
+      if(players[idx][j].id == newmembers[i]) break;
+    }
+    if(j==l){
+      players[idx].push({id: newmembers[i], isReady: false});
+    }
+  }
+}
+function deletePlayers(conv, pl){
+  var idx = searchRoomsforRoom(conv);
+  if(idx<0) {
+    showLog('Room not found in _rooms_, please check!');
+    return;
+  }
+  var deletedmembers = pl.members;
+  // var l = players[idx].length;
+  var pls = players[idx];
+  for(var i=0; i<deletedmembers.length; i++){
+    for(var j=0; j<pls.length; j++){
+      if(pls[j].id == deletedmembers[i]){
+        pls.splice(j, 1);
+        break;
+      }
+    }
+  }
+  players[idx] = pls;
+}
+function searchRoomsforRoom(conv){
+  var cid = conv.id;
+  for(var i=0; i<rooms.length; i++){
+    if(rooms[i].id == cid){
+      return i;
+    }
+  }
+  return -1;
+}
+
+//目前只处理一种东西，就是readyMsg
+function dealWithMessage(message, idx){
+  var t = message.text;
+  var f = message.from;
+  var conv = rooms[idx];
+  var fidx = -1;
+  for(var i=0; i<players[idx].length; i++){
+    if(players[idx][i].id == f){
+      fidx = i;
+    }
+  }
+  if(t == readyMsg){
+    players[idx][fidx].isReady = true;
+  }
 }
 
 function sendMsg(e, msg) {
@@ -125,129 +265,8 @@ function sendMsg(e, msg) {
     showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
     printWall.scrollTop = printWall.scrollHeight;
   });
-
 }
 
-// 发送多媒体消息示例
-function sendMsgAsFile() {
-
-  var val = inputSend.value;
-
-  // 不让发送空字符
-  if (!String(val).replace(/^\s+/, '').replace(/\s+$/, '')) {
-    alert('请输入点文字！');
-  }
-  new AV.File('message.txt', {
-    base64: b64EncodeUnicode(val),
-  }).save().then(function(file) {
-    return room.send(new AV.FileMessage(file));
-  }).then(function(message) {
-    // 发送成功之后的回调
-    inputSend.value = '';
-    showLog('（' + formatTime(message.timestamp) + '）  自己： ', createLink(message.getFile().url()));
-    printWall.scrollTop = printWall.scrollHeight;
-  }).catch(console.warn);
-
-}
-
-function createJoinRoom(){
-  quitRoom();
-  showLog('正在创建房间……');
-  var roomName = 'RoomPlay';
-  client.createConversation({
-    name: roomName,
-    members:[]
-    //members:[], attributes:{};
-  })
-  .then(function(conversation){
-    roomId = conversation.id;
-    showLog('创建新Room成功，id是：', roomId);
-    return conversation;
-  })
-  .then(function(conversation){
-    return conversation.join();
-  })
-  .then(function(conversation){
-    room = conversation;
-    messageIterator = conversation.createMessagesIterator();
-    getLog(function() {
-      printWall.scrollTop = printWall.scrollHeight;
-      showLog('已经加入房间！');
-    })
-    conversation.on('message', function(message) {
-      if (!msgTime) {
-        // 存储下最早的一个消息时间戳
-        msgTime = message.timestamp;
-      }
-      checkReady(message);
-      checkOppFinished(message);
-      showMsg(message);
-    });
-  })
-  .catch(function(err){
-    console.error(err);
-  })
-}
-
-function joinRoom(e, i){
-  quitRoom();
-  var rNum = inputRoomId.value;
-  if(i) rNum = i;
-  // showLog('准备加入房间ID：', rId);
-  showLog('准备加入房间 ', rNum);
-  var rId = rooms[rNum-1].id;
-  client.getConversation(rId)
-  .then(function(conversation){
-    if(conversation){
-      return conversation;
-    }
-    else{
-      showLog('服务器没有这个room, 请创建');
-      return ;
-    }
-  })
-  .then(function(conversation){
-    return conversation.join();
-  })
-  .then(function(conversation){
-    room = conversation;
-    messageIterator = conversation.createMessagesIterator();
-    getLog(function(){
-      printWall.scrollTop = printWall.scrollHeight;
-      showLog('已经加入。');
-      showLog('Members are: '+room.members+'.');
-    });
-    conversation.on('message', function(message) {
-      if (!msgTime) {
-        // 存储下最早的一个消息时间戳
-        msgTime = message.timestamp;
-      }
-      checkReady(message);
-      checkOppFinished(message);
-      showMsg(message);
-    });
-  })
-  .catch(function(err){
-    console.error(err);
-  })
-}
-
-function sendReady(){
-  var val = "ready";
-  // 不让发送空字符
-  if (!String(val).replace(/^\s+/, '').replace(/\s+$/, '')) {
-    alert('请输入点文字！');
-  }
-
-  // 向这个房间发送消息，这段代码是兼容多终端格式的，包括 iOS、Android、Window Phone
-  room.send(new AV.TextMessage(val)).then(function(message) {
-    // 发送成功之后的回调
-    checkReady(message);
-    inputSend.value = '';
-    showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
-    printWall.scrollTop = printWall.scrollHeight;
-  });
-}
 
 function queryRooms(){
   var query = client.getQuery();
@@ -269,73 +288,15 @@ function queryRooms(){
       }
     }
     autoquit = false;
-    // if(idx){
-      // showLog('找到之前加入的房间，自动加入第一个房间！');
-      // joinRoom(idx);
-    // }
-    // autojoin = false;
   })
   .catch(console.error.bind(console));
 }
-
-function quitRoom(){
-  if(!room){
-    showLog('并未加入房间，不能退出房间');
-    return;
-  }
-  room.quit()
-  .then(function(){
-    showLog('成功退出房间');
-  }).catch(console.error.bind(console));
-  room = null;
-}
-
 
 //supporting functions
 function b64EncodeUnicode(str) {
     return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
         return String.fromCharCode('0x' + p1);
     }));
-}
-
-function checkReady(m){
-  var text = m.text;
-  var from = m.from;
-  if(text=='ready') {
-    if(from !== clientId)
-      oppReady = true;
-    else
-      selfReady = true;
-  }
-  if(selfReady===true && oppReady===true){
-    startCountdown(3);
-  }
-}
-function checkOppFinished(m){
-  var text = m.text;
-  console.log(text);
-  var from = m.from;
-  if(text.indexOf("OPP: finished")>=0){
-    alert('opp has finished!');
-  }
-  endGame();
-}
-
-function startCountdown(sec){
-  showLog("start Countdown!");
-  showLog("secs remain: ", sec--);
-  setTimeout(function(){
-    if(sec>0){
-      showLog("secs remain: ", sec--);
-      setTimeout(arguments.callee, 1000);
-    }
-    else {
-      showLog("Countdown over!!");
-      // printWall.visibility = 'hidden';
-      // printWall.style.visibility='hidden';
-      runGame();
-    }
-  }, 1000);
 }
 
 // 显示接收到的信息
