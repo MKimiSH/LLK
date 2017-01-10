@@ -8,12 +8,19 @@ AV.initialize(appId, appKey);
 var roomId = '586cf9f161ff4b006b2eff0a';
 var rooms = [];
 
+AV.Realtime.defineConversationProperty('vis');
+AV.Realtime.defineConversationProperty('num');
+AV.Realtime.defineConversationProperty('inGame');
+AV.Realtime.defineConversationProperty('maxPlayers');
+AV.Realtime.defineConversationProperty('gameName');
+
 // 每个客户端自定义的 id
 var clientId = 'testLLK';
 // 一些特定的消息，用于标识开始、结束等控制事件。
 var readyMsg = 'READYyYyY';
 var startMsg = 'StaRtTtTt';
 var endMsg = 'EndDdDDDd';
+var finishedMsg = 'FinIshEdD';
 
 var realtime;
 var client;
@@ -251,7 +258,7 @@ function sendReady(){
 
 function queryRooms(){
   var query = client.getQuery();
-  query.equalTo('name', 'RoomPlay').find()//limit(20).containsMembers([]).compact(false).find().
+  query.limit(50).equalTo('name', 'RoomPlay').find()//limit(20).containsMembers([]).compact(false).find().
   .then(function(data){
     rooms = data;
     showRooms(rooms);
@@ -364,6 +371,7 @@ function showRooms(rooms){
   showLog("共有"+lrooms+"个房间: ");
   for(var i=0; i<lrooms; i++){
     showLog("Room "+(i+1));
+    showLog("No. "+(rooms[i].num));
     showLog("ID: "+ rooms[i].id);
     // showLog("Number of members: "+ rooms[i].members.length);
     showLog("members: " + rooms[i].members);

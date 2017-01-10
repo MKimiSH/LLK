@@ -1,12 +1,20 @@
 // script for ROOMHEAD, which is in charge of creating rooms
 // and checking ready and start and end games.
 // it is supposed to run all-the-time.
+// 接下来改logger了。
 var appId = 'Ecy4bFJFxCowJKwqNtO1GLsv-gzGzoHsz';
 var appKey = 'JwVKNn8ayp8kU5IwVKc7UjUb';
 
 AV.initialize(appId, appKey);
-var rooms = []; //在每个房间都存在着的成员
+var rooms = []; //在每个房间都存在ROOMHEAD
 var players = [];
+// room.attr: vis, Num, inGame
+AV.Realtime.defineConversationProperty('vis');
+AV.Realtime.defineConversationProperty('num');
+AV.Realtime.defineConversationProperty('inGame');
+AV.Realtime.defineConversationProperty('maxPlayers');
+AV.Realtime.defineConversationProperty('gameName');
+// player.attr: id, isReady
 
 // 每个客户端自定义的 id
 var clientId = 'ROOMHEAD';
@@ -33,6 +41,8 @@ var logFlag = false;
 // 拉取历史相关
 // 最早一条消息的时间戳
 var msgTime;
+
+var printWall = document.getElementById('print-wall');
 
 main();
 
@@ -61,11 +71,13 @@ function main(){
   })
   .then(function(){
     showLog('查找已有房间……');
-    rooms = queryRooms(true);
-  })
-  .then(function(){
-    ensureConstRooms(10);
-    initPlayers();
+    $.when(queryRooms())
+    .then(function(){
+      $.when(ensureConstRooms(10))
+      .then(function(){
+        initPlayers();
+      });
+    })
   })
   .then(function(){
     client.on('membersjoined', function membersjoinedEventHandler(payload, conversation) {
@@ -82,49 +94,69 @@ function main(){
 
 function ensureConstRooms(N){
   var nrooms = rooms.length;
+  var dtd = $.Deferred();
   var i;
-  if(nrooms>=N){
+  if(nrooms>N){
     showLog('Set '+(nrooms-N)+' rooms invisible!');
     for(i=N; i<nrooms; i++){
-      rooms[i].set('attr', {vis:false});
+      rooms[i].vis = false;
     }
+    dtd.resolve();
   }
   else {
+    var cnt = 0;
     showLog('Add '+(N-nrooms)+' rooms!');
     for(i=nrooms; i<N; i++){
-      rooms[i] = createOneRoom();
+      //createOneRoom(i);
+      $.when(createOneRoom(i))
+      .then(function(){
+        cnt++;
+        if(cnt == N){
+          dtd.resolve();
+          showLog("dtd resoved");
+        }
+      })
     }
   }
   for(i=0; i<N; i++){
-    joinOneRoom(i);
-    rooms[i].set('attr', {Num: i, vis: true, inGame: false});
+    // joinOneRoom(i);
+    // // rooms[i].set('attr', {Num: i, vis: true, inGame: false});
+    // rooms[i].num=i;
+    // rooms[i].vis=true;
+    // rooms[i].inGame=false;
     players[i] = new Array();
   }
+  return dtd.promise();
 }
 
-function createOneRoom(){
+function createOneRoom(idx){
   showLog('Create one room!');
   var curRoom;
   var currId;
   var roomName = 'RoomPlay';
+  var dtdd = $.Deferred();
   client.createConversation({
     name: roomName,
     members: [],
-    attributes: {gameName:'LLK', maxPlayers: 6};
+    gameName: 'LLK',
+    num: idx,
+    vis: true,
+    inGame: false,
+    maxPlayers: 6
   })
   .then(function(conv){
     currId = conv.id;
-    showLog('Created room: ', currId);
     return conv;
   })
-  // .then(function(conv){
-    // return conv.join();
-  // }) // 在joinOneRoom中加入
+  .then(function(conv){
+    return conv.join();
+  }) // 在joinOneRoom中加入
   .then(function(conv){
     curRoom = conv;
+    rooms[idx] = conv;
     // ROOMHEAD 不关心过去的聊天记录
     // 不用messageIterator
-    showLog('Joined room.');
+    showLog('Created room: ', currId);
     conv.on('message', function(message){
       if(!msgTime){
         msgTime = message.timestamp;
@@ -132,10 +164,14 @@ function createOneRoom(){
       dealWithMessage(message, conv.get('attr').Num);
     });
   })
+  .then(function(){
+    dtdd.resolve();
+  })
   .catch(function(err){
     console.error(err);
   });
-  return curRoom;
+  // return curRoom;
+  return dtdd.promise();
 }
 
 function joinOneRoom(i){
@@ -150,7 +186,7 @@ function joinOneRoom(i){
       return;
     }
   })
-  .then(function(conv)){
+  .then(function(conv){
     return conv.join();
   })
   .then(function(conv){
@@ -186,6 +222,9 @@ function initPlayers(){
 }
 
 function addPlayers(conv, pl){
+  if(pl.members.length == 1 && pl.members[0]==clientId){
+    return;
+  }
   var idx = searchRoomsforRoom(conv);
   if(idx<0) {
     showLog('Room not found in _rooms_, please check!');
@@ -199,6 +238,7 @@ function addPlayers(conv, pl){
     }
     if(j==l){
       players[idx].push({id: newmembers[i], isReady: false});
+      showLog("Player "+newmembers[i]+" joined room "+idx);
     }
   }
 }
@@ -215,6 +255,7 @@ function deletePlayers(conv, pl){
     for(var j=0; j<pls.length; j++){
       if(pls[j].id == deletedmembers[i]){
         pls.splice(j, 1);
+        showLog("Player "+deletedmembers[i]+" left room "+idx);
         break;
       }
     }
@@ -273,7 +314,8 @@ function startGameRoom(idx){
     showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
     printWall.scrollTop = printWall.scrollHeight;
   });
-  rooms[idx].set('attr', {inGame: true});
+  // rooms[idx].set('attr', {inGame: true});
+  rooms[idx].inGame = true;
 }
 function endGameRoom(idx){
   var val = endMsg;
@@ -284,7 +326,38 @@ function endGameRoom(idx){
     printWall.scrollTop = printWall.scrollHeight;
   });
   sendMsg('Winner is ' + players[idx][fidx].id);
-  rooms[idx].set('attr', {inGame: false});
+  // rooms[idx].set('attr', {inGame: false});
+  rooms[idx].inGame = false;
+}
+
+function queryRooms(){
+  var query = client.getQuery();
+  var dtd = $.Deferred();
+  query.limit(100).equalTo('name', 'RoomPlay').find()//limit(20).containsMembers([]).compact(false).find().
+  .then(function(data){
+    rooms = data;
+    showRooms(rooms);
+  })
+  .then(function(){
+    // if(!autojoin) return;
+    if(!autoquit) return;
+    var idx;
+    for(var i=0; i<rooms.length; i++){
+      console.log(rooms[i].members);
+      if(rooms[i].members.indexOf(clientId)>=0){
+        rooms[i].quit();
+        idx = i+1;
+        // break;
+      }
+    }
+    autoquit = false;
+  })
+  .then(function(){
+    showLog('DTD resolved');
+    dtd.resolve();
+  })
+  .catch(console.error.bind(console));
+  return dtd.promise();
 }
 
 function sendMsg(e, msg) {
@@ -308,29 +381,6 @@ function sendMsg(e, msg) {
 }
 
 
-function queryRooms(){
-  var query = client.getQuery();
-  query.equalTo('name', 'RoomPlay').find()//limit(20).containsMembers([]).compact(false).find().
-  .then(function(data){
-    rooms = data;
-    showRooms(rooms);
-  })
-  .then(function(){
-    // if(!autojoin) return;
-    if(!autoquit) return;
-    var idx;
-    for(var i=0; i<rooms.length; i++){
-      console.log(rooms[i].members);
-      if(rooms[i].members.indexOf(clientId)>=0){
-        rooms[i].quit();
-        idx = i+1;
-        // break;
-      }
-    }
-    autoquit = false;
-  })
-  .catch(console.error.bind(console));
-}
 
 //supporting functions
 function b64EncodeUnicode(str) {
