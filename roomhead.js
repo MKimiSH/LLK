@@ -23,6 +23,7 @@ var readyMsg = 'READYyYyY';
 var startMsg = 'StaRtTtTt';
 var endMsg = 'EndDdDDDd';
 var finishedMsg = 'FinIshEdD';
+var NROOMS = 10;
 
 var realtime;
 var client;
@@ -73,7 +74,7 @@ function main(){
     showLog('查找已有房间……');
     $.when(queryRooms())
     .then(function(){
-      $.when(ensureConstRooms(10))
+      $.when(ensureConstRooms(NROOMS))
       .then(function(){
         initPlayers();
       });
@@ -96,12 +97,21 @@ function ensureConstRooms(N){
   var nrooms = rooms.length;
   var dtd = $.Deferred();
   var i;
-  if(nrooms>N){
+  if(nrooms>=N){
     showLog('Set '+(nrooms-N)+' rooms invisible!');
     for(i=N; i<nrooms; i++){
       rooms[i].vis = false;
     }
-    dtd.resolve();
+    var cnt=0;
+    for(i=0; i<N; i++){
+      $.when(joinOneRoom(i))
+      .then(function(){
+        cnt++;
+        if(cnt==N){
+          dtd.resolve();
+        }
+      })
+    }
   }
   else {
     var cnt = 0;
@@ -161,7 +171,7 @@ function createOneRoom(idx){
       if(!msgTime){
         msgTime = message.timestamp;
       }
-      dealWithMessage(message, conv.get('attr').Num);
+      dealWithMessage(message, idx);
     });
   })
   .then(function(){
@@ -176,6 +186,7 @@ function createOneRoom(idx){
 
 function joinOneRoom(i){
   var rid = rooms[i].id;
+  var dtd = $.Deferred();
   client.getConversation(rid)
   .then(function(conv){
     if(conv){
@@ -196,26 +207,30 @@ function joinOneRoom(i){
       if(!msgTime){
         msgTime = message.timestamp;
       }
-      dealWithMessage(message);
+      dealWithMessage(message, i);
     });
+  })
+  .then(function(){
+    dtd.resolve();
   })
   .catch(function(err){
     console.error(err);
   });
+  return dtd.promise();
 }
 
 function initPlayers(){
   showLog('init players!');
   var r;
   var i;
-  for(r=0; r<rooms.length; r++){
+  for(r=0; r<NROOMS; r++){
     ms = rooms[r].members;
     for(i=0; i<ms.length; i++){
       if(ms[i]==clientId){
         continue;
       }
       else{
-        members[idx].push({id: ms[i], isReady: false})
+        players[r].push({id: ms[i], isReady: false})
       }
     }
   }
@@ -237,8 +252,14 @@ function addPlayers(conv, pl){
       if(players[idx][j].id == newmembers[i]) break;
     }
     if(j==l){
-      players[idx].push({id: newmembers[i], isReady: false});
-      showLog("Player "+newmembers[i]+" joined room "+idx);
+      if(players[idx].length<rooms[idx].maxPlayers){
+        players[idx].push({id: newmembers[i], isReady: false});
+        showLog("Player "+newmembers[i]+" joined room "+idx);
+      }
+      else {
+        rooms[idx].remove([newmembers[i]]);
+        showLog("Player "+newmembers[i]+" kicked from room "+idx);
+      }
     }
   }
 }
@@ -264,7 +285,7 @@ function deletePlayers(conv, pl){
 }
 function searchRoomsforRoom(conv){
   var cid = conv.id;
-  for(var i=0; i<rooms.length; i++){
+  for(var i=0; i<NROOMS; i++){
     if(rooms[i].id == cid){
       return i;
     }
@@ -274,8 +295,10 @@ function searchRoomsforRoom(conv){
 
 //目前只处理一种东西，就是readyMsg
 function dealWithMessage(message, idx){
+  
   var t = message.text;
   var f = message.from;
+  showLog('deal with message '+t+' from '+f);
   var conv = rooms[idx];
   var fidx = -1;
   for(var i=0; i<players[idx].length; i++){
@@ -285,6 +308,7 @@ function dealWithMessage(message, idx){
   }
   if(t == readyMsg){
     players[idx][fidx].isReady = true;
+    sendMsg(rooms[idx], 'player '+players[idx][fidx].id+' is ready');
     checkAllReady(idx);
   }
   if(t == finishedMsg){
@@ -306,6 +330,7 @@ function checkAllReady(idx){
     startGameRoom(idx);
   }
 }
+// 其实startGameRoom还应该传给游戏者一些参数。
 function startGameRoom(idx){
   var val = startMsg;
   rooms[idx].send(new AV.TextMessage(val)).then(function(message) {
@@ -317,7 +342,7 @@ function startGameRoom(idx){
   // rooms[idx].set('attr', {inGame: true});
   rooms[idx].inGame = true;
 }
-function endGameRoom(idx){
+function endGameRoom(idx, fidx){
   var val = endMsg;
   rooms[idx].send(new AV.TextMessage(val)).then(function(message) {
     // 发送成功之后的回调
@@ -325,7 +350,7 @@ function endGameRoom(idx){
     showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
     printWall.scrollTop = printWall.scrollHeight;
   });
-  sendMsg('Winner is ' + players[idx][fidx].id);
+  sendMsg(rooms[idx], 'Winner is ' + players[idx][fidx].id);
   // rooms[idx].set('attr', {inGame: false});
   rooms[idx].inGame = false;
 }
@@ -360,10 +385,8 @@ function queryRooms(){
   return dtd.promise();
 }
 
-function sendMsg(e, msg) {
-
-  var val = inputSend.value;
-  
+function sendMsg(conv, msg) {
+  var val;
   if(msg) val = msg;
   
   // 不让发送空字符
@@ -372,9 +395,8 @@ function sendMsg(e, msg) {
   }
 
   // 向这个房间发送消息，这段代码是兼容多终端格式的，包括 iOS、Android、Window Phone
-  room.send(new AV.TextMessage(val)).then(function(message) {
+  conv.send(new AV.TextMessage(val)).then(function(message) {
     // 发送成功之后的回调
-    inputSend.value = '';
     showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
     printWall.scrollTop = printWall.scrollHeight;
   });

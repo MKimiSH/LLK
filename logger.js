@@ -21,6 +21,7 @@ var readyMsg = 'READYyYyY';
 var startMsg = 'StaRtTtTt';
 var endMsg = 'EndDdDDDd';
 var finishedMsg = 'FinIshEdD';
+var lostMsg = 'LoStTtTtT';
 
 var realtime;
 var client;
@@ -107,14 +108,14 @@ function main(){
   })
   .then(function(){
     showLog('查找已有房间……');
-    rooms = queryRooms(true);
+    queryRooms(true);
   })
   .catch(function(err){
     console.error(err);
   })
 }
 
-function sendMsg(e, msg) {
+function sendMsg(e, msg, visible) {
 
   var val = inputSend.value;
   
@@ -129,7 +130,9 @@ function sendMsg(e, msg) {
   room.send(new AV.TextMessage(val)).then(function(message) {
     // 发送成功之后的回调
     inputSend.value = '';
-    showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
+    if(visible){
+      showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
+    }
     printWall.scrollTop = printWall.scrollHeight;
   });
 
@@ -186,8 +189,7 @@ function createJoinRoom(){
         // 存储下最早的一个消息时间戳
         msgTime = message.timestamp;
       }
-      checkReady(message);
-      checkOppFinished(message);
+      checkMsg(message);
       showMsg(message);
     });
   })
@@ -229,8 +231,7 @@ function joinRoom(e, i){
         // 存储下最早的一个消息时间戳
         msgTime = message.timestamp;
       }
-      checkReady(message);
-      checkOppFinished(message);
+      checkMsg(message);
       showMsg(message);
     });
   })
@@ -240,7 +241,7 @@ function joinRoom(e, i){
 }
 
 function sendReady(){
-  var val = "ready";
+  var val = readyMsg;
   // 不让发送空字符
   if (!String(val).replace(/^\s+/, '').replace(/\s+$/, '')) {
     alert('请输入点文字！');
@@ -249,9 +250,7 @@ function sendReady(){
   // 向这个房间发送消息，这段代码是兼容多终端格式的，包括 iOS、Android、Window Phone
   room.send(new AV.TextMessage(val)).then(function(message) {
     // 发送成功之后的回调
-    checkReady(message);
     inputSend.value = '';
-    showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
     printWall.scrollTop = printWall.scrollHeight;
   });
 }
@@ -282,6 +281,17 @@ function queryRooms(){
     // }
     // autojoin = false;
   })
+  .then(function(){
+    rooms = rooms.sort(function(a,b){
+      if(a.id<b.id){
+        return -1;
+      }
+      if(a.id>b.id){
+        return 1;
+      }
+      return 0;
+    });
+  })
   .catch(console.error.bind(console));
 }
 
@@ -305,28 +315,38 @@ function b64EncodeUnicode(str) {
     }));
 }
 
-function checkReady(m){
-  var text = m.text;
-  var from = m.from;
-  if(text=='ready') {
-    if(from !== clientId)
-      oppReady = true;
-    else
-      selfReady = true;
-  }
-  if(selfReady===true && oppReady===true){
+function checkMsg(m){
+  var t = m.text;
+  var f = m.from;
+  if(t == startMsg){
     startCountdown(3);
   }
-}
-function checkOppFinished(m){
-  var text = m.text;
-  console.log(text);
-  var from = m.from;
-  if(text.indexOf("OPP: finished")>=0){
-    alert('opp has finished!');
+  else if(t == endMsg){
+    endGame();
   }
-  endGame();
 }
+// function checkReady(m){
+  // var text = m.text;
+  // var from = m.from;
+  // if(text=='ready') {
+    // if(from !== clientId)
+      // oppReady = true;
+    // else
+      // selfReady = true;
+  // }
+  // if(selfReady===true && oppReady===true){
+    // startCountdown(3);
+  // }
+// }
+// function checkOppFinished(m){
+  // var text = m.text;
+  // console.log(text);
+  // var from = m.from;
+  // if(text.indexOf("OPP: finished")>=0){
+    // alert('opp has finished!');
+  // }
+  // endGame();
+// }
 
 function startCountdown(sec){
   showLog("start Countdown!");
@@ -371,7 +391,6 @@ function showRooms(rooms){
   showLog("共有"+lrooms+"个房间: ");
   for(var i=0; i<lrooms; i++){
     showLog("Room "+(i+1));
-    showLog("No. "+(rooms[i].num));
     showLog("ID: "+ rooms[i].id);
     // showLog("Number of members: "+ rooms[i].members.length);
     showLog("members: " + rooms[i].members);

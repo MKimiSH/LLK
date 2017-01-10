@@ -507,7 +507,8 @@ function onWin(){
   var secs = millisecs/1000;
   alert('finished in ' + secs + 'secs!');
   if(room){
-    sendMsg(null, 'OPP: finished in ' + secs + 'secs!');
+    sendMsg(null, finishedMsg);
+    sendMsg(null, clientId + ' finished in ' + secs + 'secs!', true);
   }
   endGame();
 }
@@ -524,5 +525,8 @@ function checkWin(){
 //时间到了，输了！
 function onLose(){
   alert('Game over!');
+  if(room){
+    sendMsg(null, lostMsg);
+  }
   endGame();
 }
