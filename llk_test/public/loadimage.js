@@ -1,3 +1,5 @@
+// llk_test/loadimage.js: 
+// 加载网页的时候载入图片以便游戏使用
 var imgnames = ["",
         "cb1.png", 
         "ecl1.png",
@@ -21,7 +23,7 @@ var imgnames = ["",
         "ha6.png",
         "ha7.png",
         "ha8.png",
-        "yzhang.png"]; //13 images
+        "yzhang.png"]; //23 images
 var imgids = ["",
         "cb1", 
         "ecl1",
@@ -45,7 +47,7 @@ var imgids = ["",
         "ha6",
         "ha7",
         "ha8",
-        "yzhang"]; //13 images
+        "yzhang"]; //23 images
         
 var parent = document.getElementById("images-parent");
 var imgs = new Array();
@@ -56,7 +58,8 @@ function addImagetoParent(path, imgid, par, idx){
   // newimg.style.visibility="hidden";
   newimg.style.display="none";
   newimg.src = path;
-  // par.appendChild(newimg);
+    
+  // 用onload避免加载完成之前就执行
   newimg.onload = function(){
     imgs[idx] = newimg;
   }

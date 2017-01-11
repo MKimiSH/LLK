@@ -1,7 +1,7 @@
+// llk_test/roomhead.js: for ROOMHEAD
 // script for ROOMHEAD, which is in charge of creating rooms
 // and checking ready and start and end games.
 // it is supposed to run all-the-time.
-// 接下来改logger了。
 var appId = 'Ecy4bFJFxCowJKwqNtO1GLsv-gzGzoHsz';
 var appKey = 'JwVKNn8ayp8kU5IwVKc7UjUb';
 var bdst_easy = {H:5, W:8, imw:40, imh:40, osX:150, osY:10, nIm:10};
@@ -9,15 +9,15 @@ var bdst_med = {H:8, W:10, imw:40, imh:40, osX:10, osY:10, nIm:21};
 
 AV.initialize(appId, appKey);
 var rooms = []; //在每个房间都存在ROOMHEAD
-var players = [];
-// room.attr: vis, Num, inGame
+var players = []; //每个房间中的玩家列表
+// player.attr: id, isReady
+// room.attr: 意义见logger.js
 AV.Realtime.defineConversationProperty('vis');
 AV.Realtime.defineConversationProperty('num');
 AV.Realtime.defineConversationProperty('gameLevel');
 AV.Realtime.defineConversationProperty('inGame');
 AV.Realtime.defineConversationProperty('maxPlayers');
 AV.Realtime.defineConversationProperty('gameName');
-// player.attr: id, isReady
 
 // 每个客户端自定义的 id
 var clientId = 'ROOMHEAD';
@@ -83,6 +83,7 @@ function main(){
   })
   .then(function(){
     showLog('查找已有房间……');
+    // Deferred链式调用，保证先查询房间、再增删房间、再初始化玩家列表
     $.when(queryRooms())
     .then(function(){
       $.when(ensureConstRooms(NROOMS))
@@ -104,6 +105,7 @@ function main(){
   })
 }
 
+// 保证有N个房间可见
 function ensureConstRooms(N){
   var nrooms = rooms.length;
   var dtd = $.Deferred();
@@ -119,7 +121,7 @@ function ensureConstRooms(N){
       .then(function(){
         cnt++;
         if(cnt==N){
-          dtd.resolve();
+          dtd.resolve(); // 需要每个房间都加入了，才能返回
         }
       })
     }
@@ -140,16 +142,12 @@ function ensureConstRooms(N){
     }
   }
   for(i=0; i<N; i++){
-    // joinOneRoom(i);
-    // // rooms[i].set('attr', {Num: i, vis: true, inGame: false});
-    // rooms[i].num=i;
-    // rooms[i].vis=true;
-    // rooms[i].inGame=false;
     players[i] = new Array();
   }
   return dtd.promise();
 }
 
+// 创建一个房间，用Deferred
 function createOneRoom(idx){
   showLog('Create one room!');
   var curRoom;
@@ -184,7 +182,7 @@ function createOneRoom(idx){
       if(!msgTime){
         msgTime = message.timestamp;
       }
-      dealWithMessage(message, idx);
+      dealWithMessage(message, idx); 
     });
   })
   .then(function(){
@@ -197,6 +195,7 @@ function createOneRoom(idx){
   return dtdd.promise();
 }
 
+// 加入房间，同样是Deferred
 function joinOneRoom(i){
   var rid = rooms[i].id;
   var dtd = $.Deferred();
@@ -232,6 +231,7 @@ function joinOneRoom(i){
   return dtd.promise();
 }
 
+//初始化玩家列表
 function initPlayers(){
   showLog('init players!');
   var r;
@@ -243,12 +243,14 @@ function initPlayers(){
         continue;
       }
       else{
-        players[r].push({id: ms[i], isReady: false})
+        //玩家有两个属性
+        players[r].push({id: ms[i], isReady: false}) 
       }
     }
   }
 }
 
+// 清空玩家列表并踢出所有用户
 function clearPlayers(){
   if(!rooms) return;
   var tplayers = players;
@@ -263,11 +265,12 @@ function clearPlayers(){
   }
   for(var i=0; i<NROOMS; i++){
     
-      rooms[i].inGame = false;
+      rooms[i].inGame = false; //本来在游戏也不要游戏了
   }
   
 }
 
+// 响应玩家加入，更新玩家列表
 function addPlayers(conv, pl){
   if(pl.members.length == 1 && pl.members[0]==clientId){
     return;
@@ -295,6 +298,7 @@ function addPlayers(conv, pl){
     }
   }
 }
+// 响应玩家退出，更新玩家列表
 function deletePlayers(conv, pl){
   var idx = searchRoomsforRoom(conv);
   if(idx<0) {
@@ -325,7 +329,7 @@ function searchRoomsforRoom(conv){
   return -1;
 }
 
-//目前只处理一种东西，就是readyMsg
+//处理特殊信息
 function dealWithMessage(message, idx){
   
   var t = message.text;
@@ -348,6 +352,7 @@ function dealWithMessage(message, idx){
   }
 }
 
+// 如果大家都准备了就开始吧！
 function checkAllReady(idx){
   var conv = rooms[idx];
   var pls = players[idx];
@@ -366,7 +371,7 @@ function checkAllReady(idx){
     startGameRoom(idx);
   }
 }
-// 其实startGameRoom还应该传给游戏者一些参数。
+// 在一个房间里开始游戏，发送一些游戏参数给玩家。
 function startGameRoom(idx){
   var val = startMsg;
   var lvl = rooms[idx].gameLevel;
@@ -390,7 +395,7 @@ function startGameRoom(idx){
   // rooms[idx].set('attr', {inGame: true});
   rooms[idx].inGame = true;
 }
-
+// 在一个房间里结束游戏，宣布胜者
 function endGameRoom(idx, fidx){
   var val = endMsg;
   rooms[idx].send(new AV.TextMessage(val)).then(function(message) {
@@ -403,6 +408,7 @@ function endGameRoom(idx, fidx){
   rooms[idx].inGame = false;
 }
 
+// 链式调用，查询已有房间
 function queryRooms(){
   var query = client.getQuery();
   var dtd = $.Deferred();
@@ -442,7 +448,6 @@ function sendMsg(conv, msg) {
     alert('请输入点文字！');
   }
 
-  // 向这个房间发送消息，这段代码是兼容多终端格式的，包括 iOS、Android、Window Phone
   conv.send(new AV.TextMessage(val)).then(function(message) {
     // 发送成功之后的回调
     showLog('（' + formatTime(message.timestamp) + '）  自己： ', encodeHTML(message.text));
@@ -450,6 +455,7 @@ function sendMsg(conv, msg) {
   });
 }
 
+// 广播
 function sendMsgAll(e, msg){
   var val = inputSend.value;
   if(msg) val = msg;
@@ -460,7 +466,7 @@ function sendMsgAll(e, msg){
   
 }
 
-// *******************
+// *********************************************************
 //supporting functions
 function b64EncodeUnicode(str) {
     return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
@@ -500,7 +506,7 @@ function showRooms(rooms){
   }
 }
 
-// printwall
+// printwall -----------------------------------------------
 // 拉取历史
 bindEvent(printWall, 'scroll', function(e) {
   if (printWall.scrollTop < 20) {

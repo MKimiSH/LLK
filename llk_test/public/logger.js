@@ -1,18 +1,21 @@
+// llk_test/logger.js: For player.html
+// Author: MKimiSH
 
+// appId 和 appKey 是 API给的
 var appId = 'Ecy4bFJFxCowJKwqNtO1GLsv-gzGzoHsz';
 var appKey = 'JwVKNn8ayp8kU5IwVKc7UjUb';
 
 AV.initialize(appId, appKey);
-// 请换成你自己的一个房间的 conversation id（这是服务器端生成的）
+
 var roomId = '586cf9f161ff4b006b2eff0a';
 var rooms = [];
 
-AV.Realtime.defineConversationProperty('vis');
-AV.Realtime.defineConversationProperty('num');
-AV.Realtime.defineConversationProperty('gameLevel');
-AV.Realtime.defineConversationProperty('inGame');
-AV.Realtime.defineConversationProperty('maxPlayers');
-AV.Realtime.defineConversationProperty('gameName');
+AV.Realtime.defineConversationProperty('vis'); //是否可见
+AV.Realtime.defineConversationProperty('num'); //编号
+AV.Realtime.defineConversationProperty('gameLevel'); //游戏难度
+AV.Realtime.defineConversationProperty('inGame'); //是否在游戏
+AV.Realtime.defineConversationProperty('maxPlayers'); //最大玩家数
+AV.Realtime.defineConversationProperty('gameName'); //游戏名称
 
 // 每个客户端自定义的 id
 var clientId = 'testLLK';
@@ -41,6 +44,7 @@ var firstFlag = true;
 // 用来标记历史消息获取状态
 var logFlag = false;
 
+// 关联DOM
 var openBtn = document.getElementById('open-btn');
 var sendBtnAsFile = document.getElementById('send-btn-as-file');
 var sendBtn = document.getElementById('send-btn');
@@ -49,7 +53,6 @@ var createRoomBtn = $('#create-room')[0];
 var joinRoomBtn = $('#join-room')[0];
 var quitRoomBtn = $('#quit-room')[0];
 var readyBtn = $('#ready-button')[0];
-
 var inputName = document.getElementById('input-name');
 var inputSend = document.getElementById('input-send');
 var printWall = document.getElementById('print-wall');
@@ -59,6 +62,7 @@ var inputRoomId = $('#input-roomname')[0];
 // 最早一条消息的时间戳
 var msgTime;
 
+// 绑定按钮点击事件处理
 bindEvent(openBtn, 'click', main);
 bindEvent(sendBtn, 'click', sendMsg);
 bindEvent(sendBtnAsFile, 'click', sendMsgAsFile);
@@ -68,7 +72,7 @@ bindEvent(joinRoomBtn, 'click', joinRoom);
 bindEvent(readyBtn, 'click', sendReady);
 bindEvent(quitRoomBtn, 'click', quitRoom);
 
-
+// 绑定回车
 bindEvent(document.body, 'keydown', function(e) {
   if (e.keyCode === 13) {
     if (firstFlag) {
@@ -79,6 +83,10 @@ bindEvent(document.body, 'keydown', function(e) {
   }
 });
 
+// 连接服务器并生成client
+// 链式调用是Promise的用法，保证前一个函数返回之后才调用后一个
+// then里的函数。
+// then里匿名函数的参数是上一个函数的返回值
 function main(){
   showLog('正在连接服务器。。。');
   var val = inputName.value;
@@ -106,15 +114,17 @@ function main(){
       showLog('服务器正在重连，请耐心等待。。。');
     });
   })
+  // 查找并列出已有房间
   .then(function(){
     showLog('查找已有房间……');
     queryRooms(true);
   })
+  // 对玩家绑定事件，处理其他玩家进出的事件
   .then(function(){
     client.on('membersjoined', function membersjoinedEventHandler(payload, conversation) {
       showLog('玩家进入房间: ', payload.members);
       if(selfReady){
-        sendReady();
+        sendReady(); //这样新来的玩家知道我已准备了
       }
     });
     client.on('membersleft', function membersleftEventHandler(payload, conversation) {
@@ -126,8 +136,8 @@ function main(){
   })
 }
 
+// e是event，msg是要发送的东西，invisible则不showLog()
 function sendMsg(e, msg, invisible) {
-
   var val = inputSend.value;
   
   if(msg) val = msg;
@@ -171,6 +181,7 @@ function sendMsgAsFile() {
 
 }
 
+// 创建房间并加入
 function createJoinRoom(){
   quitRoom();
   showLog('正在创建房间……');
@@ -190,6 +201,7 @@ function createJoinRoom(){
   })
   .then(function(conversation){
     room = conversation;
+    // messageIterator是用来收消息的
     messageIterator = conversation.createMessagesIterator();
     getLog(function() {
       printWall.scrollTop = printWall.scrollHeight;
@@ -208,6 +220,7 @@ function createJoinRoom(){
   })
 }
 
+// 加入第i个房间
 function joinRoom(e, i){
   quitRoom();
   var rNum = inputRoomId.value;
@@ -251,6 +264,7 @@ function joinRoom(e, i){
   })
 }
 
+// 发送准备信息
 function sendReady(){
   var val = readyMsg;
   // 不让发送空字符
@@ -258,7 +272,6 @@ function sendReady(){
     alert('请输入点文字！');
   }
 
-  // 向这个房间发送消息，这段代码是兼容多终端格式的，包括 iOS、Android、Window Phone
   room.send(new AV.TextMessage(val)).then(function(message) {
     // 发送成功之后的回调
     inputSend.value = '';
@@ -269,6 +282,7 @@ function sendReady(){
   });
 }
 
+// 查询已有房间
 function queryRooms(){
   var query = client.getQuery();
   query.limit(50).equalTo('name', 'RoomPlay').find()//limit(20).containsMembers([]).compact(false).find().
@@ -276,7 +290,8 @@ function queryRooms(){
     rooms = data;
   })
   .then(function(){
-    // if(!autojoin) return;
+    // 在第一次查询的时候，如果有上次加入的房间
+    // 就退出，因为那不是这次会话要用的房间
     if(!autoquit) return;
     var idx;
     for(var i=0; i<rooms.length; i++){
@@ -289,6 +304,7 @@ function queryRooms(){
     }
   })
   .then(function(){
+    // rooms可能乱序，所以给它一个顺序
     rooms = rooms.sort(function(a,b){
       if(a.gameLevel<b.gameLevel){
         return -1;
@@ -306,6 +322,7 @@ function queryRooms(){
   .catch(console.error.bind(console));
 }
 
+// 在加入房间时退出房间
 function quitRoom(){
   if(!room){
     showLog('并未加入房间，不能退出房间');
@@ -318,7 +335,7 @@ function quitRoom(){
   room = null;
 }
 
-
+// ***************************
 //supporting functions
 function b64EncodeUnicode(str) {
     return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
@@ -326,13 +343,14 @@ function b64EncodeUnicode(str) {
     }));
 }
 
+// 检查消息并处理特殊消息。
 var recvBdst;
 function checkMsg(m){
   var t = m.text;
   var f = m.from;
   var parset;
   try{
-    parset = JSON.parse(t);
+    parset = JSON.parse(t); // 接受ROOMHEAD发来的游戏属性
   }catch(e){}
   if(t == startMsg && f == 'ROOMHEAD'){
     startCountdown(3);
@@ -358,6 +376,7 @@ function checkMsg(m){
   }
 }
 
+// 倒计时并开始游戏
 function startCountdown(sec){
   showLog("start Countdown!");
   showLog("secs remain: ", sec--);
@@ -418,7 +437,7 @@ function showRooms(rooms, hideMembers){
   }
 }
 
-// printwall
+// ------------printwall----------------------
 // 拉取历史
 bindEvent(printWall, 'scroll', function(e) {
   if (printWall.scrollTop < 20) {

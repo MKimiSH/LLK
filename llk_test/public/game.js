@@ -2,29 +2,24 @@
 
 // JS for llk
 
-var difficulty = 0; // 暂时只有0
-var board = new Array();
+var difficulty = 0; // 不使用，由ROOMHEAD定义
+var board = new Array(); // 游戏棋盘
 var numImages = 6; // 1~numImages in board -> images
 var bStatus = {H:4, W:4, imw:40, imh:40, osX:10, osY:10, nIm:2};
 var numTilesLeft = 0; //必为偶数
 var numTilesStart = 0;
 var playerScore = 0;
-var hintsLeft = 0;
-var hintTiles;
-var shuffleLeft = 0;
+var hintsLeft = 0; // 不使用，剩余的提示数
+var hintTiles;     // 提示指示的坐标
+var shuffleLeft = 0; // 不使用，剩余的洗牌数
 var EMPTY = 0;
 var timeLeft = 100; //剩余秒数
 
-var cTile = {i:0, j:0};
+var cTile = {i:0, j:0}; // 当前点击块
 var isWin = false;
 var startTime;
 var inGame = false;
 
-var boardCanvas = document.createElement("canvas");
-boardCanvas.width = 500;
-boardCanvas.height = 300;
-boardCanvas.style.display = "none";
-var boardContext = boardCanvas.getContext("2d");
 
 var canvas = $("canvas")[0];
 canvas.width = 800;
@@ -57,7 +52,6 @@ shuffleBtn.click(function(){
   displayBoard(context, board, bStatus.H, bStatus.W);
 });
 
-
 canvas.onclick = function(e){
   var point = window2Canvas(e.clientX, e.clientY);
   if(pointInBoard(point)){
@@ -66,6 +60,8 @@ canvas.onclick = function(e){
 }
 
 //可以接收别人发来的status
+//开始游戏，要设置一系列东西，包括状态值、HTML元素的可见性
+//以及canvas开始计时等
 function runGame(recvBdst){
   // imgs = getImgs(imgs, imgids);
   isWin = false;
@@ -84,6 +80,8 @@ function runGame(recvBdst){
   displayBoard(context, board, bStatus.H, bStatus.W);
 }
 
+
+//结束游戏，把开始游戏时改的再改回成原来状态
 function endGame(){
   canvas.style.display = "none";
   printWall.style.display = '';
@@ -102,7 +100,7 @@ function endGame(){
   context.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-
+// -------------------------------------------------------
 // 画图的函数们
 function displayBoard(cxt, board, H, W, clickedTile){
   var imh = bStatus.imh;
@@ -124,6 +122,7 @@ function displayBoard(cxt, board, H, W, clickedTile){
   cxt.font = "14px SimSun";
   cxt.fillText("剩余块数：" + numTilesLeft, tosx, tosy);
   
+  // 画红框
   if(clickedTile){
     var dx = offsetX+imw*(clickedTile.j);
     var dy = offsetY+imh*(clickedTile.i);
@@ -134,6 +133,7 @@ function displayBoard(cxt, board, H, W, clickedTile){
     cxt.lineWidth = 3;
     cxt.stroke();
   }
+  // 画黄框
   if(hintTiles){
     for(var idx=0; idx<2; ++idx){
       var i = hintTiles[idx].i, j = hintTiles[idx].j;
@@ -150,11 +150,7 @@ function displayBoard(cxt, board, H, W, clickedTile){
   }
 }
 
-
-function tilesDisappear(){
-  
-}
-
+// 画时间条
 function startBleed(cxt){
   var imh = bStatus.imh;
   var imw = bStatus.imw;
@@ -192,6 +188,7 @@ function startBleed(cxt){
   }, 500);
 }
 
+// 画蓝线然后消失
 function connectTile(ctx, tile1, tile2){
   var imh = bStatus.imh;
   var imw = bStatus.imw;
@@ -212,7 +209,9 @@ function connectTile(ctx, tile1, tile2){
   ctx.stroke();
 }
 
+// ------------------------------------------------------------
 //控制函数
+// 更新board
 function updateBoard(point){
   var tileClicked = point2Tile(point.x, point.y);
   var i1 = cTile.i, j1 = cTile.j, i2 = tileClicked.i, j2 = tileClicked.j;
@@ -264,11 +263,11 @@ function pointInBoard(point){
   return point.x<=bdW+osx && point.x>osx && point.y<=bdH+osy && point.y>osy;
 }
 
+// 一些坐标转换函数
 function window2Canvas(x,y){
   var bbox = canvas.getBoundingClientRect();
   return {x: x-bbox.left, y: y-bbox.top};
 }
-
 function board2Canvas(tile){
   var imh = bStatus.imh;
   var imw = bStatus.imw;
@@ -276,7 +275,6 @@ function board2Canvas(tile){
   var offsetX = bStatus.osX;
   return {x: offsetX + tile.j*imw + imw/2, y: offsetY + tile.i*imh + imh/2};
 }
-
 function point2Tile(x, y){
   var imh = bStatus.imh;
   var imw = bStatus.imw;
@@ -286,12 +284,10 @@ function point2Tile(x, y){
   y -= offsetY;
   x /= imw;
   y /= imh;
-  // console.log([parseInt(y), parseInt(x)]);
-  // return {x:parseInt(x)+1, y:parseInt(y)+1};
   return {i:parseInt(y), j:parseInt(x)};
 }
 
-// 游戏函数
+// 游戏函数 ---------------------------------------------------
 // build->display->choose (mouse)->checkConnect->tilesDisappear->displayBoard
 
 /**
@@ -311,6 +307,7 @@ function shuffleArray(arr) {
     return input;
 }
 
+// 洗牌
 function shuffleBoard(){
   // var sbd = new Array(); //shuffledBoard;
   var tiles = new Array();
@@ -335,6 +332,7 @@ function shuffleBoard(){
 function randint(b, e){
   return Math.floor(Math.random()*(e-b+1))+b;
 }
+// 初始化board
 function buildBoard(){
   numTilesLeft = bStatus.H * bStatus.W;
   var tile4rand = numTilesLeft - 2*numImages; //每个图像至少两张
@@ -344,6 +342,7 @@ function buildBoard(){
     tiles[c] = randint(1, numImages);
     tiles[c+1] = tiles[c];
   }
+  // 保证每个用到的image都至少有一对
   for(; c<numTilesLeft; c++){
     tiles[c] = (c-tile4rand)%numImages+1;
   }
@@ -368,6 +367,8 @@ function buildBoard(){
   shuffleBoard();
 }
 
+// ------------------------------------------------
+// 游戏逻辑
 function buildConnBoard(i,j){
   var concol = new Array();
   var conrow = new Array();
@@ -422,8 +423,8 @@ function check2line(i,j , k,l){
   if(r2) return {i:k, j:j};
   return false;
 }
-// check3line = 构造两个cbd, 分别给出两个点能够一次连接到达的地方，然后对应查看有无1连接的存在
-// 当然可以不用board，一维数组足矣。。
+// check3line = 构造两个cbd,
+// 分别给出两个点能够一次连接到达的地方，然后对应查看有无1连接的存在
 function check3line(i,j , k,l){
   var cbd1 = buildConnBoard(i,j); //connect board
   var cbd2 = buildConnBoard(k,l);
