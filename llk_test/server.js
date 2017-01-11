@@ -26,3 +26,14 @@ app.listen(PORT, function () {
     console.error("Unhandled Rejection at: Promise ", p, " reason: ", reason.stack);
   });
 });
+
+
+
+// script for ROOMHEAD, which is in charge of creating rooms
+// and checking ready and start and end games.
+// it is supposed to run all-the-time.
+// 接下来改logger了。
+// require('./node_modules/leancloud-realtime/dist/realtime.browser.min.js')
+// require('./node_modules/leancloud-storage/dist/av-min.js');
+// require('.node_modules/leancloud-realtime/plugins/typed-messages/dist/typed-messages.min.js');
+

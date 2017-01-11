@@ -30,6 +30,26 @@ app.get('/', function(req, res) {
   res.render('index', { currentTime: new Date() });
 });
 
+
+app.get('/index.html', function(req, res){
+  res.sendFile('public/index.html', {root:__dirname});
+});
+
+var nRH = 0;
+app.get('/prerun.html', function(req,res){
+  if(nRH==0){
+    res.sendFile('public/prerun.html', {root:__dirname});
+    nRH = 1;
+  }
+  else{
+    res.send('网管已经登录，不能重复登录');
+  }
+});
+
+app.get('/player.html', function(req, res){
+  res.sendFile('public/player.html', {root:__dirname});
+});
+
 // 可以将一类的路由单独保存在一个文件中
 app.use('/todos', todos);
 
